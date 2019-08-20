@@ -1,12 +1,8 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 
-/*
- * A simple program to sub for sockets
- *
- */
+#include <netinet/in.h>
 
 
 int sw_listen(int argc, char *argv[])
@@ -76,7 +72,7 @@ int main(int argc, char *argv[])
 {
 	if ( argc < 2 )
 	{ 
-		printf("\n\tUsage STATEMENT\n\n\n\tConnect:(waits on recv)\n\tmal 192.168.1.1 22\n\n\tListen: (Waits on recv)\n\tmal 222\n\n");
+		printf("\n\tUsage STATEMENT\n\n");
 		return 2;
 	} else if ( strcmp(argv[1], "-l") == 0 )
 	{
