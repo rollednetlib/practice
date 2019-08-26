@@ -34,31 +34,11 @@ func init(){
 
 func main() {
 	publicRouter := httprouter.New();
-	publicRouter.GET("/", SignInGet);
-	publicRouter.POST("/", SignInPost);
+	publicRouter.GET("/signin", SignInGet);
+	publicRouter.POST("/signin", SignInPost);
 	http.ListenAndServe(":8000", publicRouter);
 }
 
-/*
-func main() {
-	userDB := "userDB:"
-	email := "testmail@mail.org"
-	password := "TestPass"
-	if checkDB("userDB:",email) {
-		fmt.Println("FOUND!");
-	} else {
-		fmt.Println("NOT FOUND!\nAdding to DB.");
-		addUser(email, "OneTimePassasdasd");
-	}
-	setDB(userDB + email, "passwordHash","$2a$14$mKidP0mTs8P7Y.NC7BLofO9SkTIBc9Y8GhKNviVyj1rotU7uftxaK");
-	if checkCred(email, password) {
-		fmt.Println("PASSED!");
-	} else {
-		fmt.Println("FAILED");
-	}
-
-}
-*/
 
 ///// Web Page Routes /////
 ///Sign in Pages
@@ -68,16 +48,27 @@ func SignInGet(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 func SignInPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	r.ParseForm();
-	email := strings.Join(r.Form["username"], "")
-	password := strings.Join(r.Form["password"], "")
-	if checkCred(email, password) {
-		fmt.Fprintf(w, "PASS");
-		fmt.Println( email)
-	} else {
+	email := r.FormValue("username")
+	password := r.FormValue("password")
+	if !checkCred(email, password) {
 		fmt.Fprintf(w, "FAILED!");
-		fmt.Println(" ", email)
 	}
+	token := newSession(email);
+	tokenCookie := http.Cookie{
+		Name:	"token",
+		Value:	token,
+		Expires:time.Now().Add(900 * time.Second),
+	};
+	http.SetCookie(w, &tokenCookie);
+	http.SetCookie(w, &http.Cookie{
+		Name:	"id",
+		Value:	email,
+		Expires:time.Now().Add(900 * time.Second),
+	});
+
+	fmt.Println("Logging in ", email)
 }
+
 ///
 
 ///// Utility Functions /////
@@ -121,6 +112,18 @@ func refreshSession(email string, sessionToken string) {
 	conn.Do("SETEX", "sessionDB:" + email, 900, sessionToken);
 }
 
+func checkSession(email string, sessionToken string) bool {
+	conn := pool.Get();
+	defer conn.Close();
+	token, err := redis.String(conn.Do("GET", "sessionDB:" + email));
+	if err != nil {
+		return false;
+	}
+	if sessionToken == token {
+		return true;
+	}
+	return false;
+}
 
 //Check user credentials
 func checkCred(email string, password string) bool {
