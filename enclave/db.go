@@ -1,9 +1,13 @@
 package main
 
-import ("fmt"
+import ("github.com/julienschmidt/httprouter"
 	"github.com/gomodule/redigo/redis"
 	"golang.org/x/crypto/bcrypt"
+	"net/http"
+	"math/rand"
 	"strings"
+	"time"
+	"fmt"
 )
 
 var pool * redis.Pool
@@ -29,6 +33,14 @@ func init(){
 }
 
 func main() {
+	publicRouter := httprouter.New();
+	publicRouter.GET("/", SignInGet);
+	publicRouter.POST("/", SignInPost);
+	http.ListenAndServe(":8000", publicRouter);
+}
+
+/*
+func main() {
 	userDB := "userDB:"
 	email := "testmail@mail.org"
 	password := "TestPass"
@@ -46,7 +58,29 @@ func main() {
 	}
 
 }
+*/
 
+///// Web Page Routes /////
+///Sign in Pages
+func SignInGet(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	http.ServeFile(w, r, "signin.html");
+}
+
+func SignInPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	r.ParseForm();
+	email := strings.Join(r.Form["username"], "")
+	password := strings.Join(r.Form["password"], "")
+	if checkCred(email, password) {
+		fmt.Fprintf(w, "PASS");
+		fmt.Println( email)
+	} else {
+		fmt.Fprintf(w, "FAILED!");
+		fmt.Println(" ", email)
+	}
+}
+///
+
+///// Utility Functions /////
 // Bcrypt password hashing
 func hashPassword(password string) (string) {
 	bytes, _ := bcrypt.GenerateFromPassword([]byte(password), 14);
@@ -54,10 +88,39 @@ func hashPassword(password string) (string) {
 }
 
 func checkPassword(password string, hash string) bool {
+//	fmt.Println(password, " pass III hash ", hash)
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password));
 	return err == nil;
 }
-//
+
+//String Generator
+func genToken(len int) string {
+	rand.Seed(time.Now().UnixNano());
+	bytes := make([]byte, len);
+	for i := 0; i < len; i++ {
+		bytes[i] = byte(65 + rand.Intn(25));
+	}
+	return string(bytes);
+}
+// // //
+
+
+///// User Management /////
+// New Session
+func newSession(email string) string {
+	conn := pool.Get();
+	defer conn.Close();
+	sessionToken := genToken(128);
+	conn.Do("SETEX", "sessionDB:" + email, 900, sessionToken);
+	return sessionToken;
+}
+
+func refreshSession(email string, sessionToken string) {
+	conn := pool.Get();
+	defer conn.Close();
+	conn.Do("SETEX", "sessionDB:" + email, 900, sessionToken);
+}
+
 
 //Check user credentials
 func checkCred(email string, password string) bool {
@@ -73,7 +136,8 @@ func addUser(email string, password string) {
 }
 
 
-//Redis DB management functions
+/// Redis DB management functions ///
+// Get an item from db
 func getDB(match string, target string) string {
 	conn := pool.Get();
 	defer conn.Close();
@@ -81,12 +145,14 @@ func getDB(match string, target string) string {
 	return item;
 }
 
+// Set an item from DB
 func setDB(match string, target string, value string) {
 	conn := pool.Get();
 	defer conn.Close();
 	conn.Do("HSET", match, target, value);
 }
 
+//Check if item exists
 func checkDB(match string, target string) bool {
 	conn := pool.Get();
 	defer conn.Close();
@@ -106,15 +172,11 @@ func checkDB(match string, target string) bool {
 		keys, _ = redis.Strings(arr[1], nil)
 	}
 
-//	fmt.Println(keys)
-
-	// check if we need to stop...
 	if iter == 0  {
 		break
 		}
 	}
 	for _, element := range keys {
-	//	fmt.Println(element);
 		if strings.Contains(element, target) {
 			return true;
 		}
