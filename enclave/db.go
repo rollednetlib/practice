@@ -135,18 +135,25 @@ func ResetPassPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) 
 	email := r.FormValue("username");
 	sms := r.FormValue("phone");
 	host := ReadConf("host");
+	fmt.Println(sms)
+	
 	if validEmail(email) {
+		fmt.Println(email)
 		if checkDB("userDB:", email) {
 			resetUrl := genUrl(email);
 			fmt.Println(email);
 			msg := "ONETIME RESET URL: https://"+ host + "/reset/" + resetUrl + "\n\n";
+			fmt.Println(sms)
 			if sms == "sms" {
 				to := hgetDB("userDB:" + email, "phone");
 				fmt.Println("Sending SMS! ", to);
 				sendSMS(msg, to);
-			} else {
-				sendMail(msg, email)
+				
+				return;
 			}
+				fmt.Println("EMAIL");
+				sendMail(msg, email)
+			
 		}
 	}
 }
@@ -213,6 +220,7 @@ func checkPassword(password string, hash string) bool {
 func validEmail(email string) bool {
         re := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
         if !(re.MatchString(email)) {
+		fmt.Println("FAILED");
                 return false;
         }
 	return true;
