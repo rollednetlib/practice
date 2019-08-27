@@ -54,6 +54,7 @@ func main() {
 
 
 	publicRouter.GET("/register", RegisterGet);
+	publicRouter.POST("/register", RegisterPost);
 
 	publicRouter.GET("/profile", ProfileGet);
 	http.ListenAndServe(":8000", publicRouter);
@@ -93,6 +94,7 @@ func SignInPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	});
 
 	fmt.Println("Logging in ", email)
+	http.Redirect(w, r, "/profile", 301);
 }
 ///
 
@@ -117,9 +119,19 @@ func RegisterGet(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 }
 
 func RegisterPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-//	email := r.FormValue("username");
+	email := r.FormValue("username");
 //	password := r.FormValue("password");
-//	registerUser(email, password);
+//	registerUser(email);
+	if !checkDB("userDB:", email) {
+		host := ReadConf("host");
+		registerUrl := genUrl(email);
+		msg := "To complete registration, click this link.\n https://" + host + "/reset/" + registerUrl + "\n\n";
+		hsetDB("userDB:" + email, "email", email);
+		sendMail(msg, email);
+		http.ServeFile(w, r, "registersent.html");
+	} else {
+		http.ServeFile(w, r, "registerfail.html");
+	}
 //
 }
 
@@ -136,7 +148,6 @@ func ResetPassPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) 
 	sms := r.FormValue("phone");
 	host := ReadConf("host");
 	fmt.Println(sms)
-	
 	if validEmail(email) {
 		fmt.Println(email)
 		if checkDB("userDB:", email) {
