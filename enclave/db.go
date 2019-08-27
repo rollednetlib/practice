@@ -8,6 +8,7 @@ import ("github.com/julienschmidt/httprouter"
 	"net/http"
 	"math/rand"
 	"strings"
+	"regexp"
 	"time"
 	"fmt"
 	"log"
@@ -132,12 +133,21 @@ func ResetPassPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) 
 	r.ParseForm();
 	http.ServeFile(w, r, "resetsent.html");
 	email := r.FormValue("username");
+	sms := r.FormValue("phone");
 	host := ReadConf("host");
-	if checkDB("userDB:", email) {
-		resetUrl := genUrl(email);
-		fmt.Println(email);
-		msg := "ONETIME RESET URL: https://"+ host + "/reset/" + resetUrl + "\n\n";
-		sendMail(msg, email)
+	if validEmail(email) {
+		if checkDB("userDB:", email) {
+			resetUrl := genUrl(email);
+			fmt.Println(email);
+			msg := "ONETIME RESET URL: https://"+ host + "/reset/" + resetUrl + "\n\n";
+			if sms == "sms" {
+				to := hgetDB("userDB:" + email, "phone");
+				fmt.Println("Sending SMS! ", to);
+				sendSMS(msg, to);
+			} else {
+				sendMail(msg, email)
+			}
+		}
 	}
 }
 ///
@@ -160,6 +170,7 @@ func OneTimePost(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		email := getDB("onetimeDB:" + oneTime);
 		fmt.Println("EMAIL: ", email);
 		hsetDB("userDB:" + email, "password", hashword);
+		http.ServeFile(w, r, "onetimefinish.html");
 
 	} else {
 		fmt.Println("False");
@@ -198,6 +209,16 @@ func checkPassword(password string, hash string) bool {
 	return err == nil;
 }
 
+///Regex Check email
+func validEmail(email string) bool {
+        re := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+        if !(re.MatchString(email)) {
+                return false;
+        }
+	return true;
+}
+
+
 ///String Generator
 func genToken(len int) string {
 	rand.Seed(time.Now().UnixNano());
@@ -231,6 +252,31 @@ func sendMail(body string, to string) {
 	}
 	log.Print(" MAILING ");
 }
+
+///SendSMS
+func sendSMS(msg string, to string) {
+
+	//twilioNumber := "+17622043080";
+	twilioNumber := ReadConf("twilioNumber");
+	twilioUser := ReadConf("twilioUser");
+	twilioToken := ReadConf("twilioToken");
+	twilioAccount := ReadConf("twilioAccount");
+	body := strings.NewReader(`Body=` + msg + `&From=` + twilioNumber + `&To=` + to)
+	req, err := http.NewRequest("POST", "https://api.twilio.com/2010-04-01/Accounts/" + twilioAccount +"/Messages.json", body)
+	if err != nil {
+		// handle err
+	}
+	req.SetBasicAuth(twilioUser,twilioToken)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// handle err
+	}
+	defer resp.Body.Close()
+}
+
+
 
 ///Config Reader
 func ReadConf(item string) string {
@@ -295,7 +341,7 @@ func checkSession(email string, sessionToken string) bool {
 
 ///Check user credentials
 func checkCred(email string, password string) bool {
-	passwordHash := hgetDB("userDB:" + email, "passwordHash");
+	passwordHash := hgetDB("userDB:" + email, "password");
 	return checkPassword(password, passwordHash);
 }
 
